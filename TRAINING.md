@@ -14,7 +14,7 @@ This will create the directory `datasets/<dataset_name>` with train/ val/ and te
 Now you can train a new model by running the script:
 
 ```bash
-python scripts/train.py
+python scripts/train.py --device auto  # auto: cuda -> mps -> cpu
 ```
 
 By default this will train a model on Zara1, periodically saving checkpoint files `checkpoint_with_model.pt` and `checkpoint_no_model.pt` to the current working directory. The training script has a number of command-line flags that you can use to configure the model architecture, hyperparameters, and input / output settings:

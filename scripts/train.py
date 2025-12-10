@@ -18,8 +18,10 @@ from sgan.losses import displacement_error, final_displacement_error
 from sgan.models import TrajectoryGenerator, TrajectoryDiscriminator
 from sgan.utils import int_tuple, bool_flag, get_total_norm
 from sgan.utils import relative_to_abs, get_dset_path
+from sgan.utils import resolve_device, move_batch_to_device, synchronize
 
-torch.backends.cudnn.benchmark = True
+if torch.cuda.is_available():
+    torch.backends.cudnn.benchmark = True
 
 parser = argparse.ArgumentParser()
 FORMAT = '[%(levelname)s: %(filename)s: %(lineno)4d]: %(message)s'
@@ -91,6 +93,7 @@ parser.add_argument('--num_samples_check', default=5000, type=int)
 parser.add_argument('--use_gpu', default=1, type=int)
 parser.add_argument('--timing', default=0, type=int)
 parser.add_argument('--gpu_num', default="0", type=str)
+parser.add_argument('--device', default='auto', type=str)
 
 
 def init_weights(m):
@@ -99,21 +102,12 @@ def init_weights(m):
         nn.init.kaiming_normal_(m.weight)
 
 
-def get_dtypes(args):
-    long_dtype = torch.LongTensor
-    float_dtype = torch.FloatTensor
-    if args.use_gpu == 1:
-        long_dtype = torch.cuda.LongTensor
-        float_dtype = torch.cuda.FloatTensor
-    return long_dtype, float_dtype
-
-
 def main(args):
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_num
+    device = resolve_device(args.device, use_gpu=bool(args.use_gpu))
+    if device.type == "cuda":
+        os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_num
     train_path = get_dset_path(args.dataset_name, 'train')
     val_path = get_dset_path(args.dataset_name, 'val')
-
-    long_dtype, float_dtype = get_dtypes(args)
 
     logger.info("Initializing train dataset")
     train_dset, train_loader = data_loader(args, train_path)
@@ -148,7 +142,7 @@ def main(args):
         batch_norm=args.batch_norm)
 
     generator.apply(init_weights)
-    generator.type(float_dtype).train()
+    generator.to(device).train()
     logger.info('Here is the generator:')
     logger.info(generator)
 
@@ -164,7 +158,7 @@ def main(args):
         d_type=args.d_type)
 
     discriminator.apply(init_weights)
-    discriminator.type(float_dtype).train()
+    discriminator.to(device).train()
     logger.info('Here is the discriminator:')
     logger.info(discriminator)
 
@@ -186,7 +180,7 @@ def main(args):
 
     if restore_path is not None and os.path.isfile(restore_path):
         logger.info('Restoring from checkpoint {}'.format(restore_path))
-        checkpoint = torch.load(restore_path)
+        checkpoint = torch.load(restore_path, map_location=device)
         generator.load_state_dict(checkpoint['g_state'])
         discriminator.load_state_dict(checkpoint['d_state'])
         optimizer_g.load_state_dict(checkpoint['g_optim_state'])
@@ -232,7 +226,7 @@ def main(args):
         logger.info('Starting epoch {}'.format(epoch))
         for batch in train_loader:
             if args.timing == 1:
-                torch.cuda.synchronize()
+                synchronize(device)
                 t1 = time.time()
 
             # Decide whether to use the batch for stepping on discriminator or
@@ -242,7 +236,7 @@ def main(args):
                 step_type = 'd'
                 losses_d = discriminator_step(args, batch, generator,
                                               discriminator, d_loss_fn,
-                                              optimizer_d)
+                                              optimizer_d, device)
                 checkpoint['norm_d'].append(
                     get_total_norm(discriminator.parameters()))
                 d_steps_left -= 1
@@ -250,14 +244,14 @@ def main(args):
                 step_type = 'g'
                 losses_g = generator_step(args, batch, generator,
                                           discriminator, g_loss_fn,
-                                          optimizer_g)
+                                          optimizer_g, device)
                 checkpoint['norm_g'].append(
                     get_total_norm(generator.parameters())
                 )
                 g_steps_left -= 1
 
             if args.timing == 1:
-                torch.cuda.synchronize()
+                synchronize(device)
                 t2 = time.time()
                 logger.info('{} step took {}'.format(step_type, t2 - t1))
 
@@ -292,12 +286,13 @@ def main(args):
                 # Check stats on the validation set
                 logger.info('Checking stats on val ...')
                 metrics_val = check_accuracy(
-                    args, val_loader, generator, discriminator, d_loss_fn
+                    args, val_loader, generator, discriminator, d_loss_fn,
+                    device
                 )
                 logger.info('Checking stats on train ...')
                 metrics_train = check_accuracy(
                     args, train_loader, generator, discriminator,
-                    d_loss_fn, limit=True
+                    d_loss_fn, device, limit=True
                 )
 
                 for k, v in sorted(metrics_val.items()):
@@ -360,9 +355,9 @@ def main(args):
 
 
 def discriminator_step(
-    args, batch, generator, discriminator, d_loss_fn, optimizer_d
+    args, batch, generator, discriminator, d_loss_fn, optimizer_d, device
 ):
-    batch = [tensor.cuda() for tensor in batch]
+    batch = move_batch_to_device(batch, device)
     (obs_traj, pred_traj_gt, obs_traj_rel, pred_traj_gt_rel, non_linear_ped,
      loss_mask, seq_start_end) = batch
     losses = {}
@@ -398,9 +393,9 @@ def discriminator_step(
 
 
 def generator_step(
-    args, batch, generator, discriminator, g_loss_fn, optimizer_g
+    args, batch, generator, discriminator, g_loss_fn, optimizer_g, device
 ):
-    batch = [tensor.cuda() for tensor in batch]
+    batch = move_batch_to_device(batch, device)
     (obs_traj, pred_traj_gt, obs_traj_rel, pred_traj_gt_rel, non_linear_ped,
      loss_mask, seq_start_end) = batch
     losses = {}
@@ -456,7 +451,7 @@ def generator_step(
 
 
 def check_accuracy(
-    args, loader, generator, discriminator, d_loss_fn, limit=False
+    args, loader, generator, discriminator, d_loss_fn, device, limit=False
 ):
     d_losses = []
     metrics = {}
@@ -468,7 +463,7 @@ def check_accuracy(
     generator.eval()
     with torch.no_grad():
         for batch in loader:
-            batch = [tensor.cuda() for tensor in batch]
+            batch = move_batch_to_device(batch, device)
             (obs_traj, pred_traj_gt, obs_traj_rel, pred_traj_gt_rel,
              non_linear_ped, loss_mask, seq_start_end) = batch
             linear_ped = 1 - non_linear_ped

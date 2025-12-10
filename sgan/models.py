@@ -17,11 +17,11 @@ def make_mlp(dim_list, activation='relu', batch_norm=True, dropout=0):
     return nn.Sequential(*layers)
 
 
-def get_noise(shape, noise_type):
+def get_noise(shape, noise_type, device=None):
     if noise_type == 'gaussian':
-        return torch.randn(*shape).cuda()
+        return torch.randn(*shape, device=device)
     elif noise_type == 'uniform':
-        return torch.rand(*shape).sub_(0.5).mul_(2.0).cuda()
+        return torch.rand(*shape, device=device).sub_(0.5).mul_(2.0)
     raise ValueError('Unrecognized noise type "%s"' % noise_type)
 
 
@@ -47,8 +47,12 @@ class Encoder(nn.Module):
 
     def init_hidden(self, batch):
         return (
-            torch.zeros(self.num_layers, batch, self.h_dim).cuda(),
-            torch.zeros(self.num_layers, batch, self.h_dim).cuda()
+            torch.zeros(
+                self.num_layers, batch, self.h_dim,
+                device=self.spatial_embedding.weight.device),
+            torch.zeros(
+                self.num_layers, batch, self.h_dim,
+                device=self.spatial_embedding.weight.device)
         )
 
     def forward(self, obs_traj):
@@ -464,9 +468,11 @@ class TrajectoryGenerator(nn.Module):
             noise_shape = (_input.size(0), ) + self.noise_dim
 
         if user_noise is not None:
-            z_decoder = user_noise
+            z_decoder = user_noise.to(_input.device)
         else:
-            z_decoder = get_noise(noise_shape, self.noise_type)
+            z_decoder = get_noise(
+                noise_shape, self.noise_type, device=_input.device
+            )
 
         if self.noise_mix_type == 'global':
             _list = []
@@ -527,8 +533,9 @@ class TrajectoryGenerator(nn.Module):
         decoder_h = torch.unsqueeze(decoder_h, 0)
 
         decoder_c = torch.zeros(
-            self.num_layers, batch, self.decoder_h_dim
-        ).cuda()
+            self.num_layers, batch, self.decoder_h_dim,
+            device=decoder_h.device
+        )
 
         state_tuple = (decoder_h, decoder_c)
         last_pos = obs_traj[-1]

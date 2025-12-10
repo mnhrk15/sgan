@@ -1,0 +1,59 @@
+# OS
+.DS_Store
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.so
+*.pyd
+*.pyo
+
+# Packaging / build
+build/
+dist/
+*.egg
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+*.whl
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+.conda/
+
+# Test / tooling caches
+.pytest_cache/
+.mypy_cache/
+.pytype/
+.cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Editor settings
+.vscode/
+.idea/
+*.swp
+
+# Data, checkpoints, logs
+datasets/
+models/
+sgan-models/
+sgan-p-models/
+runs/
+wandb/
+*.pt
+*.pth
+*.pkl
+*.np[zy]
+*.ckpt
+*.log
+*.out
+*.err
+
+# Downloaded archives
+datasets.zip
+models.zip

@@ -4,7 +4,6 @@ import torch
 import numpy as np
 import inspect
 from contextlib import contextmanager
-import subprocess
 
 
 def int_tuple(s):
@@ -30,6 +29,39 @@ def lineno():
     return str(inspect.currentframe().f_back.f_lineno)
 
 
+def resolve_device(device_preference="auto", use_gpu=True):
+    """
+    Decide execution device with preference order:
+    1) explicit device string (cpu/cuda/mps)
+    2) cuda if available
+    3) mps if available
+    4) cpu fallback
+    """
+    preferred = (device_preference or "auto").lower()
+    if preferred != "auto":
+        return torch.device(preferred)
+    if not use_gpu:
+        return torch.device("cpu")
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
+
+
+def move_batch_to_device(batch, device):
+    return [tensor.to(device) for tensor in batch]
+
+
+def synchronize(device=None):
+    if device is None:
+        return
+    if device.type == "cuda" and torch.cuda.is_available():
+        torch.cuda.synchronize()
+    elif device.type == "mps" and torch.backends.mps.is_available():
+        torch.mps.synchronize()
+
+
 def get_total_norm(parameters, norm_type=2):
     if norm_type == float('inf'):
         total_norm = max(p.grad.data.abs().max() for p in parameters)
@@ -46,30 +78,25 @@ def get_total_norm(parameters, norm_type=2):
 
 
 @contextmanager
-def timeit(msg, should_time=True):
+def timeit(msg, should_time=True, device=None):
     if should_time:
-        torch.cuda.synchronize()
+        synchronize(device)
         t0 = time.time()
     yield
     if should_time:
-        torch.cuda.synchronize()
+        synchronize(device)
         t1 = time.time()
         duration = (t1 - t0) * 1000.0
         print('%s: %.2f ms' % (msg, duration))
 
 
 def get_gpu_memory():
-    torch.cuda.synchronize()
-    opts = [
-        'nvidia-smi', '-q', '--gpu=' + str(1), '|', 'grep', '"Used GPU Memory"'
-    ]
-    cmd = str.join(' ', opts)
-    ps = subprocess.Popen(
-        cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    output = ps.communicate()[0].decode('utf-8')
-    output = output.split("\n")[0].split(":")
-    consumed_mem = int(output[1].strip().split(" ")[0])
-    return consumed_mem
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+        return torch.cuda.memory_allocated()
+    if torch.backends.mps.is_available():
+        return torch.mps.current_allocated_memory()
+    return 0
 
 
 def get_dset_path(dset_name, dset_type):

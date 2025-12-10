@@ -40,18 +40,18 @@ Our model consists of three key components: Generator (G), Pooling Module (PM) a
 </div>
 
 ## Setup
-All code was developed and tested on Ubuntu 16.04 with Python 3.5 and PyTorch 0.4.
-
-You can setup a virtual environment to run the code like this:
+Tested on Python 3.10/3.11/3.12 with PyTorch 2.5.1 (MPS/Metal enabled on Apple Silicon).
 
 ```bash
-python3 -m venv env               # Create a virtual environment
-source env/bin/activate           # Activate virtual environment
-pip install -r requirements.txt   # Install dependencies
-echo $PWD > env/lib/python3.5/site-packages/sgan.pth  # Add current directory to python path
-# Work for a while ...
-deactivate  # Exit virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+# Optional: add editable path for local import
+echo $PWD > .venv/lib/$(python -c "import sys; print(f'python{sys.version_info.major}.{sys.version_info.minor}')")/site-packages/sgan.pth
 ```
+
+Deviceは自動で `cuda` → `mps` → `cpu` の優先順位で選択されます。明示的に指定したい場合は学習/評価スクリプトに `--device cuda|mps|cpu` を渡してください。
 
 ## Pretrained Models
 You can download pretrained models by running the script `bash scripts/download_models.sh`. This will download the following models:
