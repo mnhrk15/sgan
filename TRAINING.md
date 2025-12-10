@@ -28,7 +28,7 @@ By default this will train a model on Zara1, periodically saving checkpoint file
 ### Dataset options
 
 - `--dataset_name`: The dataset to use for training; must be either of the five supported datasets. Default is `zara1`.
-- `--delim`: Delimiter used in the files of the dataset. Default is ' '.
+- `--delim`: Delimiter used in the files of the dataset. Default is `tab` (datasets are tab-separated; keep this unless your data is space-separated).
 - `--obs_len`: Number of time-steps in input trajectories. Default is 8.
 - `--pred_len`: Number of time-steps in output trajectories. Default is 8.
 - `--loader_num_workers`: The number of background threads to use for data loading. Default is 4.

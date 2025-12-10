@@ -51,7 +51,8 @@ pip install -r requirements.txt
 echo $PWD > .venv/lib/$(python -c "import sys; print(f'python{sys.version_info.major}.{sys.version_info.minor}')")/site-packages/sgan.pth
 ```
 
-Deviceは自動で `cuda` → `mps` → `cpu` の優先順位で選択されます。明示的に指定したい場合は学習/評価スクリプトに `--device cuda|mps|cpu` を渡してください。
+Deviceは自動で `cuda` → `mps` → `cpu` の優先順位で選択されます。明示的に指定したい場合は学習/評価スクリプトに `--device cuda|mps|cpu` を渡してください。  
+データファイルのデリミタはタブ区切りなので、`train.py` の既定 `--delim tab` のまま実行してください（旧既定のスペースでは読み込みに失敗します）。
 
 ## Pretrained Models
 You can download pretrained models by running the script `bash scripts/download_models.sh`. This will download the following models:
